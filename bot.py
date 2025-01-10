@@ -10,11 +10,11 @@ from config.config import load_config
 from src.handlers import routers
 from src.middlewares import (
     DbSessionMiddleware,
-    MessageInPrivateMiddleware,
-    GetConfigMiddleware,
+    GetConfigMiddleware, GetDinamoMiddleware,
 )
 from src.models import Base
-from src.services import backups
+from src.services import backups, scheduler
+from src.services.parser import DinamoParser
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,8 @@ async def main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    dinamo = DinamoParser()
+
     bot: Bot = Bot(
         token=config.bot.token,
         default=DefaultBotProperties(parse_mode='HTML'),
@@ -43,12 +45,12 @@ async def main():
 
     dp.include_routers(*routers)
 
-    dp.message.outer_middleware(MessageInPrivateMiddleware())
-
     dp.update.middleware(DbSessionMiddleware(sessionmaker))
     dp.update.middleware(GetConfigMiddleware(config))
+    dp.update.middleware(GetDinamoMiddleware(dinamo))
 
     asyncio.create_task(backups.run(bot, config))
+    asyncio.create_task(scheduler.run(bot, sessionmaker, dinamo))
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

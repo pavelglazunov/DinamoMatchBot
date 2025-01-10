@@ -3,10 +3,14 @@ from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
+from config.config import Config
+from src.services.parser import DinamoParser
 
-class MessageInPrivateMiddleware(BaseMiddleware):
-    def __init__(self):
+
+class GetDinamoMiddleware(BaseMiddleware):
+    def __init__(self, dinamo: DinamoParser):
         super().__init__()
+        self.dinamo = dinamo
 
     async def __call__(
             self,
@@ -15,7 +19,6 @@ class MessageInPrivateMiddleware(BaseMiddleware):
             event: TelegramObject,
             data: Dict[str, Any],
     ) -> Any:
-        if event.chat.type != "private":
-            return
+        data["dinamo"] = self.dinamo
 
         return await handler(event, data)
