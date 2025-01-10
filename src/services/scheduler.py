@@ -55,12 +55,12 @@ async def run(bot: Bot, session_maker: async_sessionmaker, dinamo: DinamoParser)
     await dinamo.parse()
     await dinamo.drop_old()
     logging.info("parsed successful")
-    dinamo.matches.add(Match(
-        team1="Мотя",
-        team2="Митя",
-        string_time="8 янв. 19:00",
-        time=datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=1),
-    ))
+    # dinamo.matches.add(Match(
+    #     team1="Мотя",
+    #     team2="Митя",
+    #     string_time="8 янв. 19:00",
+    #     time=datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=1),
+    # ))
 
     reparse_counter = 0
 

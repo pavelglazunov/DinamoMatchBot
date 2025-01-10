@@ -9,18 +9,18 @@ from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 
 MONTHS_DECODER = {
-    "янв": 1,
-    "фев": 2,
-    "мар": 3,
-    "апр": 4,
+    "января": 1,
+    "февраля": 2,
+    "марта": 3,
+    "апреля": 4,
     "мая": 5,
     "июня": 6,
     "июля": 7,
-    "авг": 8,
-    "сен": 9,
-    "окт": 10,
-    "ноя": 11,
-    "дек": 12,
+    "августа": 8,
+    "сентября": 9,
+    "октября": 10,
+    "ноября": 11,
+    "декабря": 12,
 }
 
 
@@ -37,94 +37,97 @@ class Match:
 
 
 class DinamoParser:
-    url = "https://fcdm.ru/fixtures/dynamo/calendar/"
+    url = "https://dynamo.ru/games"
 
     def __init__(self):
         self.matches = set()
 
-    async def get_page(self, month: int, year: int) -> (str, int, int):
+    async def get_page(self, month: int) -> (str, int, int):
         try:
             async with ClientSession() as session:
-                async with session.get(
-                        url=self.url,
-                        params={"year": year, "month": month},
-                ) as response:
+                async with session.get(self.url + f"#{month}-list") as response:
                     response.raise_for_status()
-                    return await response.text(), month, year
+                    return await response.text(), month
         except aiohttp.client_exceptions.ClientConnectorError:
-            return "", month, year
+            return "", month
         except aiohttp.client_exceptions.ClientResponseError:
-            return "", month, year
+            return "", month
 
     async def parse(self):
 
         today = datetime.date.today()
         current_month = today.month
-        current_year = today.year
 
-        funcs = [self.get_page(month, current_year) for month in range(current_month, 13)]
+        funcs = [self.get_page(month) for month in range(current_month, 13)]
 
         pages_content = await asyncio.gather(*funcs)
         pool = [(*cnt, 0) for cnt in pages_content]
         limit = 10
         while pool:
-            content, month, year, retries = pool.pop(0)
+            content, month, retries = pool.pop(0)
             if content:
                 await self.parse_matches(content)
                 continue
             if retries < limit:
-                pool.append((*(await self.get_page(month, year)), retries + 1))
+                pool.append((*(await self.get_page(month)), retries + 1))
             else:
-                logging.error(f"can't fetch {month} month {year} year after {limit} retries")
+                logging.error(f"can't fetch {month} month after {limit} retries")
 
     async def parse_matches(self, html: str):
         soup = BeautifulSoup(html)
 
         matches = soup.find_all("div", {
-            "class": "js-match-calendar-card",
+            "class": "calendarthumb _state-base",
         })
         for match_html in matches:
-            content = match_html.find_next("div", {"class": "schedule-row__wrap"})
+            # content = match_html.find_next("div", {"class": "calendarthumb__body"})
 
-            location = content.find_next("div", {"class": "schedule-row__location"})
-            teams = content.find_next(
+            location = match_html.find_next("time", {"class": "calendarthumb__date-detail"})
+            teams = match_html.find_next(
                 "div",
-                {"class": "schedule-row__teams"},
+                {"class": "calendarthumb__body"},
             ).find_all(
                 "div",
-                {"class": "schedule-row__team"},
+                {"class": "calendarthumb__textbox"}
             )
+            date = location.find_next("span", {"class": "calendarthumb__text-item"}).text
+            time = location.find_next("span", {"class": "calendarthumb__text-item _sub"}).text
 
-            date = location.find_next("div", {"class": "schedule-row__time"}).text
+            flag = match_html.find_next(
+                "div",
+                {"class": "calendarthumb__body"},
+            ).find_next(
+                "span",
+                {"class": "calendarthumb__body-additional"}
+            )
+            if not flag:
+                continue
+
+            # date = location.find_next("div", {"class": "schedule-row__time"}).text
             team_names = []
             for team in teams:
-                name = team.find_next("div", {"class": "schedule-row__team-name"}).text
+                name = team.find_next("div", {"class": "calendarthumb__textbox-content"}).text
                 team_names.append(name)
 
             if len(team_names) != 2:
                 continue
 
-            if "-" in date or ":" not in date:
-                continue
             try:
                 match = Match(
                     team1=team_names[0],
                     team2=team_names[1],
-                    string_time=date,
-                    time=self.formalize_datetime(date),
+                    string_time=date + " " + time,
+                    time=self.formalize_datetime(date, time),
                 )
-            except:
+            except Exception as e:
                 continue
 
             self.matches.add(match)
 
     @staticmethod
-    def formalize_datetime(match_datetime: str) -> datetime.datetime:
-        match_datetime = match_datetime.replace(".", "")
-        match_date_str, _, match_time_str = match_datetime.rpartition(" ")
-
-        match_day, match_month = match_date_str.strip().split()
-        mathc_hour, match_minute = match_time_str.split(":")
+    def formalize_datetime(match_date: str, mathc_time: str) -> datetime.datetime:
+        match_day, match_month = match_date.strip().split("/")[0].split()
+        mathc_hour, match_minute = mathc_time.split(":")
 
         today = datetime.date.today()
         return datetime.datetime(
