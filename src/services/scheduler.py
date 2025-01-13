@@ -51,37 +51,39 @@ async def match_support(bot: Bot, chat_id: int, match: Match, session_maker: asy
         await asyncio.sleep(waiting_seconds)
 
 
+async def get_chats(session_maker: async_sessionmaker):
+    async with session_maker() as session:
+        db = DB(session)
+
+        return await db.chat.get_active()
+
+
 async def run(bot: Bot, session_maker: async_sessionmaker, dinamo: DinamoParser):
     await dinamo.parse()
     await dinamo.drop_old()
     logging.info("parsed successful")
-    # dinamo.matches.add(Match(
-    #     team1="Мотя",
-    #     team2="Митя",
-    #     string_time="8 янв. 19:00",
-    #     time=datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=1),
-    # ))
 
     reparse_counter = 0
 
     while True:
         now = datetime.now().replace(second=0, microsecond=0)
-        async with session_maker() as session:
-            db = DB(session)
-
-            chats = await db.chat.get_active()
-
         for match in dinamo.matches:
             delta = (match.time - now)
+
             for interval, message in zip(
                     (timedelta(days=1), timedelta(hours=1), timedelta(minutes=30),
                      timedelta(minutes=1)),
                     ("остался 1 день", "остался 1 час", "осталось 30 минут", "осталась 1 минута"),
             ):
                 if delta == interval:
+                    chats = await get_chats(session_maker)
                     content = f"До матча {match.team1} - {match.team2} {message}"
                     asyncio.create_task(mailing(bot, content, chats))
+
+                    break
             if not delta:
+                chats = await get_chats(session_maker)
+
                 for chat in chats:
                     asyncio.create_task(match_support(bot, chat, match, session_maker))
 

@@ -2,6 +2,10 @@ FROM python:3.11
 
 ENV PYTHONPATH "${PYTHONPATH}:/app"
 ENV PATH "/app/scripts:${PATH}"
+ENV TZ=Europe/Moscow
+
+RUN apt-get update && apt-get install -yy tzdata
+RUN cp /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 
 EXPOSE 80
